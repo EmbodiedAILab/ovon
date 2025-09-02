@@ -1,0 +1,51 @@
+# ================================================
+# OVON Base Image — fixed deps, mamba-based
+# ================================================
+FROM nvidia/cuda:11.3.1-cudnn8-devel-ubuntu20.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=Etc/UTC \
+    CONDA_DIR=/opt/conda \
+    CONDA_ENV=ovon
+
+# System deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl wget ca-certificates bzip2 vim \
+    build-essential pkg-config \
+    libgl1 libegl1 libgles2 libglib2.0-0 ffmpeg \
+    libopengl0 libglvnd0 net-tools \
+    libdrm2 libgbm1 \
+ && rm -rf /var/lib/apt/lists/*
+
+# Install Mambaforge (conda+mamba)
+RUN wget -q https://github.com/conda-forge/miniforge/releases/download/25.3.1-0/Miniforge3-25.3.1-0-Linux-x86_64.sh  -O /tmp/mambaforge.sh && \
+    bash /tmp/mambaforge.sh -b -p $CONDA_DIR && rm -f /tmp/mambaforge.sh
+ENV PATH=$CONDA_DIR/bin:$PATH
+SHELL ["/bin/bash", "-lc"]
+
+# Create env & install fixed stack (Py 3.8, cmake 3.14, habitat-sim 0.2.3 headless, Torch 1.12.1 + cu11.3)
+RUN mamba create -y -n $CONDA_ENV python=3.8 cmake=3.14.0 && \
+    mamba install -y -n $CONDA_ENV \
+      -c pytorch -c nvidia -c conda-forge -c aihabitat \
+      habitat-sim=0.2.3 headless pytorch=1.12.1 cudatoolkit=11.3 && \
+    conda clean -afy
+
+# Make env default on PATH
+ENV PATH=$CONDA_DIR/envs/${CONDA_ENV}/bin:$PATH
+
+# Pin + install habitat-lab v0.2.3 & baselines (rarely changes)
+WORKDIR /workspace
+RUN git clone --branch v0.2.3 https://github.com/facebookresearch/habitat-lab.git /workspace/habitat-lab && \
+    conda run -n $CONDA_ENV pip install -e /workspace/habitat-lab/habitat-lab && \
+    conda run -n $CONDA_ENV pip install -e /workspace/habitat-lab/habitat-baselines
+
+# Global Python deps used by ovon
+RUN conda run -n $CONDA_ENV pip install \
+      ftfy regex tqdm GPUtil trimesh seaborn timm scikit-learn einops \
+      transformers==4.35.0 && \
+    conda run -n $CONDA_ENV pip install "git+https://github.com/openai/CLIP.git" && \
+    conda clean -afy
+
+# Quick self-check
+CMD ["bash", "-lc", "python -c \"import torch,habitat_sim; print('OVON base ready. CUDA:', torch.cuda.is_available())\""]
+

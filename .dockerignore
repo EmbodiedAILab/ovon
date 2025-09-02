@@ -1,0 +1,22 @@
+# Common
+.git
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.swp
+*.swc
+*.tmp
+*.log
+
+# Big/Local
+data/
+datasets/
+checkpoints/
+ckpts/
+outputs/
+wandb/
+tensorboard/
+.env
+.DS_Store
+
