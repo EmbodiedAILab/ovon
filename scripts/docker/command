@@ -2,18 +2,16 @@ docker run --gpus all -it --rm --name cuda113 nvidia/cuda:11.3.1-cudnn8-devel-ub
 
 docker run -it --rm --name cuda113 nvidia/cuda:11.3.1-cudnn8-devel-ubuntu20.04 bash
 
-docker run -it --rm --gpus all --shm-size=8g -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics -v /root/workspace/lab/ovon/data:/workspace/ovon/data ovon:dev-cu113 bash
-
 # 1) 构建 base（首次较慢，但后续几乎不动）
 docker build -f Dockerfile.base -t ovon:base-cu113 .
 
 # 2) 构建 update（之后每次改代码只重建这层，秒级/分钟级）
-docker build --build-arg github_access_token=${GITHUB_TOKEN} -f Dockerfile.update -t ovon:dev-cu113 .
+docker build --no-cache --build-arg github_access_token=${GITHUB_TOKEN} -f Dockerfile.update -t ovon:dev-cu113 .
 
 # 3) 运行(可挂载数据目录）
-docker run -it --rm --gpus all \
-  -v /root/workspace/lab/ovon/data:/workspace/ovon/data \
-  ovon:dev-cu113 bash
+docker run -it --rm --gpus all --shm-size=8g -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics -v /root/workspace/lab/ovon/data:/workspace/ovon/data ovon:dev-cu113 bash
+
+
 
 # 容器内即可直接使(环境已就绪）
 python -m ovon.run --help
