@@ -133,7 +133,7 @@ class TransformerEncoder(nn.Module):
             feats = feats.unsqueeze(1)  # (batch_size, 1, embed_dim), seq_len of 1 step
 
             # Create attention mask
-            step_ids = rnn_build_seq_info["step_id"].reshape(-1)
+            step_ids = rnn_build_seq_info["step_id"]
             attention_mask = create_mask_with_trailing_ones(
                 step_ids + 1, S=self.max_context_length
             )
