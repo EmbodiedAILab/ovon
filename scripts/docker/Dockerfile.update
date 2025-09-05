@@ -1,7 +1,7 @@
 # ================================================
 # OVON Update Image — add repo code only
 # ================================================
-FROM ovon:base-cu113
+FROM swr.cn-east-3.myhuaweicloud.com/meadow/ovon:base-cu113
 
 ARG OVON_BRANCH_TAG=hqk-dev
 ARG github_access_token="xxx"
@@ -29,6 +29,13 @@ RUN git clone --branch "${OVON_BRANCH_TAG}" https://${github_access_token}@githu
 RUN conda run -n $CONDA_ENV pip install -e . && \
     conda run -n $CONDA_ENV pip install -e frontier_exploration && \
     conda clean -afy
+
+# cp text_embeddings to data 
+RUN mkdir /workspace/ovon/data && cd /workspace/ovon
+COPY ./data/text_embeddings/ /workspace/ovon/data/text_embeddings/
+# cp huggingface cache to images
+COPY ./data/huggingface/ /root/.cache/huggingface/
+
 
 # 默认启动（可按需替换为你的训练/评估命令）
 CMD ["bash", "-lc", "python -m ovon.run --help"]

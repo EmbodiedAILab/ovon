@@ -10,7 +10,7 @@
 *.log
 
 # Big/Local
-data/
+# data/
 datasets/
 checkpoints/
 ckpts/
