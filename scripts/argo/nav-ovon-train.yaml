@@ -2,7 +2,7 @@ metadata:
   name: nav-ovon-train
   namespace: argo
 spec:
-
+  priority: 100
   templates:
     - name: main
       steps:
@@ -39,12 +39,12 @@ spec:
                 - key: cce.cloud.com/cce-nodepool
                   operator: In
                   values: 
-                    # - cce-z00562901-wf-v100-4
-                    # - cce-z00562901-wf-v100
+                    - cce-z00562901-wf-v100-4
+                    - cce-z00562901-wf-v100
                     - cce-z00562901-wf-nodepool-debug
       container:
         name: ''
-        image: swr.cn-east-3.myhuaweicloud.com/meadow/ovon:dev-cu113_v0.5
+        image: swr.cn-east-3.myhuaweicloud.com/meadow/ovon:dev-cu113_v0.7
         command:
           - /bin/bash
           - '-c'
@@ -52,6 +52,7 @@ spec:
           - |
             # tail -f /dev/null
             set -Eeuo pipefail
+            source shell_command.sh
             set -x
             chmod +x /workspace/ovon/pre_train.sh /workspace/ovon/post_train.sh
             /workspace/ovon/pre_train.sh
@@ -60,13 +61,15 @@ spec:
             export MKL_NUM_THREADS=1
             NPROC="$(nvidia-smi --list-gpus | wc -l | tr -d '[:space:]')"
             
-            torchrun --standalone \
+            log_and_execute torchrun --standalone \
               --nproc_per_node=$NPROC \
               -m ovon.run \
               --run-type train \
               --exp-config {{workflow.parameters.exp-config}} \
               habitat_baselines.num_environments={{workflow.parameters.habitat_baselines__num_environments}} \
               habitat_baselines.total_num_steps={{workflow.parameters.habitat_baselines__total_num_steps}} \
+              habitat.dataset.split={{workflow.parameters.train_split}} \
+              'habitat.dataset.data_path="{{workflow.parameters.task_datasets_path}}"'
             
             /workspace/ovon/post_train.sh
         env:
@@ -74,18 +77,18 @@ spec:
             value: '{{workflow.name}}'
           - name: EXP_CONFIG
             value: '{{workflow.parameters.exp-config}}'
-          - name: NVIDIA_VISIBLE_DEVICES
-            value: "all"
           - name: NVIDIA_DRIVER_CAPABILITIES
             value: "compute,utility,graphics"
         resources:
           limits:
-            nvidia.com/gpu: '1'
+            nvidia.com/gpu: '2'
+          requests:
+            nvidia.com/gpu: '2'
         volumeMounts:
           - name: volume-data-platform
             mountPath: >-
-              /workspace/ovon/data/task_datasets/ovon
-            subPath: data-platform/data/task_datasets/ovon
+              /workspace/ovon/data/task_datasets
+            subPath: data-platform/data/task_datasets
           - name: volume-data-platform
             mountPath: /workspace/ovon/data/scene_datasets/hm3d
             subPath: data-platform/data/scene_datasets/hm3d_v0.2
@@ -99,8 +102,10 @@ spec:
     parameters:
       - name: habitat_baselines__num_environments
         value: 8
-      - name: habitat__dataset__data_path
+      - name: task_datasets_path
         value: 'data/task_datasets/ovon/hm3d/v1/{split}/{split}.json.gz'
+      - name: train_split
+        value: 'train'
       - name: habitat_baselines__total_num_steps
         value: 80000
       - name: exp-config
