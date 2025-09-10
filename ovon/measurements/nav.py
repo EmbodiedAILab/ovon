@@ -42,22 +42,6 @@ class OVONDistanceToGoal(Measure):
                 for view_point in goal.view_points
             ]
 
-            if episode.children_object_categories is not None:
-                for children_category in episode.children_object_categories:
-                    scene_id = episode.scene_id.split("/")[-1]
-                    goal_key = f"{scene_id}_{children_category}"
-
-                    # Ignore if there are no valid viewpoints for goal
-                    if goal_key not in task._dataset.goals_by_category:
-                        continue
-                    self._episode_view_points.extend(
-                        [
-                            vp.agent_state.position
-                            for goal in task._dataset.goals_by_category[goal_key]
-                            for vp in goal.view_points
-                        ]
-                    )
-
         self.update_metric(episode=episode, task=task, *args, **kwargs)
 
     def update_metric(
