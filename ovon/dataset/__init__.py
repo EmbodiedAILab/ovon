@@ -6,3 +6,4 @@ from ovon.dataset import (
     visualization,
 )
 from ovon.dataset.ovon_dataset import OVONDatasetV1
+from ovon.dataset.objectnav_dataset import ObjectNavDatasetV1, ObjectNavDatasetV2

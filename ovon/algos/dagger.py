@@ -293,6 +293,9 @@ class DAggerPolicyMixin:
     @staticmethod
     def cheat(observations, rnn_hidden_states):
         action = observations["teacher_label"].long()
+        # 关键修复：添加动作维度 [num_envs] → [num_envs, action_dim]
+        if action.dim() == 1:  # 防御性检查，避免重复扩展
+            action = action.unsqueeze(-1)  # 在末尾添加新维度
 
         num_envs = observations["teacher_label"].shape[0]
         device = observations["teacher_label"].device
