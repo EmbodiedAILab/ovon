@@ -68,6 +68,9 @@ class CurrentEpisodeUUIDSensorConfig(LabSensorConfig):
 class StepIDSensorConfig(LabSensorConfig):
     type: str = "StepIDSensor"
 
+@dataclass
+class DemonstrationSensorConfig(LabSensorConfig):
+    type: str = "DemonstrationSensor"
 
 ##########################################################################
 # Measurements
@@ -263,6 +266,13 @@ cs.store(
     group="habitat/task/lab_sensors",
     name="step_id_sensor",
     node=StepIDSensorConfig,
+)
+
+cs.store(
+    package="habitat.task.lab_sensors.next_actions_sensor",
+    group="habitat/task/lab_sensors",
+    name="next_actions_sensor",
+    node=DemonstrationSensorConfig,
 )
 
 cs.store(
