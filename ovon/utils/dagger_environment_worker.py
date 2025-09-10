@@ -31,7 +31,7 @@ class ILEnvironmentWorkerProcess(EnvironmentWorkerProcess):
     def _step_env(self, action):
         with self.timer.avg_time("step env"):
             obs, reward, done, info = self.env.step(
-                self._last_obs[self.teacher_label].item()
+                self._last_obs[self.teacher_label]
             )
             # ^only line different from the original EnvironmentWorkerProcess._step_env
             self._step_id += 1
