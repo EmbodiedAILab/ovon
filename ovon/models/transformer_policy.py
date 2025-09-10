@@ -119,10 +119,18 @@ class OVONTransformerNet(OVONNet):
         rnn_build_seq_info: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]:
         if "step_id" in observations:
+            step_id = observations["step_id"]
+            # rnn_build_seq_info为空就是eval
             if rnn_build_seq_info is None:
                 # Means online inference. Update should already have "episode_ids" key.
                 rnn_build_seq_info = {}
-            rnn_build_seq_info["step_id"] = observations["step_id"]
+                # 这里主要是加上时间维，因为训练的时候是[T, B]，而推理的时候是[B]，B就是环境，T是采样的步数；这里不改的话，在apply_rotary_pos_emb那里就会出现维度不匹配的情况
+                if step_id.dim() == 1:
+                    step_id = step_id.unsqueeze(1)   # [B] -> [B,1]
+                elif step_id.dim() == 2 and step_id.size(0) == 1:
+                    # 如果是 [1,B] 形式，转置成 [B,1]
+                    step_id = step_id.transpose(0,1)
+            rnn_build_seq_info["step_id"] = step_id
         return super().forward(
             observations,
             rnn_hidden_states,

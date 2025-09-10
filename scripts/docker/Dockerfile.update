@@ -1,0 +1,42 @@
+# ================================================
+# OVON Update Image — add repo code only
+# ================================================
+FROM swr.cn-east-3.myhuaweicloud.com/meadow/ovon:base-cu113
+
+ARG OVON_BRANCH_TAG=hqk-dev
+ARG github_access_token="xxx"
+
+# 和 base 保持一致的 env 名称
+ENV CONDA_DIR=/opt/conda \
+    CONDA_ENV=ovon \
+    PATH=/opt/conda/envs/ovon/bin:/opt/conda/bin:$PATH
+
+# bugfix for nable to find EGL device for CUDA device 0 
+RUN mkdir -p /usr/share/glvnd/egl_vendor.d && \
+    printf '{\n  "file_format_version": "1.0.0",\n  "ICD": { "library_path": "libEGL_nvidia.so.0" }\n}\n' \
+    > /usr/share/glvnd/egl_vendor.d/50_nvidia.json
+
+# force GLVND read this
+ENV __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_nvidia.json
+
+
+# Copy your changing code in (avoid data via .dockerignore)
+WORKDIR /workspace/ovon
+#COPY . /workspace/ovon
+RUN git clone --branch "${OVON_BRANCH_TAG}" https://${github_access_token}@github.com/EmbodiedAILab/ovon.git /workspace/ovon && git submodule sync --recursive && git submodule update --init --recursive
+
+# Install ovon repo & frontier_exploration in editable mode
+RUN conda run -n $CONDA_ENV pip install -e . && \
+    conda run -n $CONDA_ENV pip install -e frontier_exploration && \
+    conda clean -afy
+
+# cp text_embeddings to data 
+RUN mkdir /workspace/ovon/data && cd /workspace/ovon
+COPY ./data/text_embeddings/ /workspace/ovon/data/text_embeddings/
+# cp huggingface cache to images
+COPY ./data/huggingface/ /root/.cache/huggingface/
+
+
+# 默认启动（可按需替换为你的训练/评估命令）
+CMD ["bash", "-lc", "python -m ovon.run --help"]
+

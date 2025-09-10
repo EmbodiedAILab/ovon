@@ -1,0 +1,32 @@
+docker run --gpus all -it --rm --name cuda113 nvidia/cuda:11.3.1-cudnn8-devel-ubuntu20.04 bash
+
+docker run -it --rm --name cuda113 nvidia/cuda:11.3.1-cudnn8-devel-ubuntu20.04 bash
+
+# 1) 构建 base（首次较慢，但后续几乎不动）
+docker build -f Dockerfile.base -t swr.cn-east-3.myhuaweicloud.com/meadow/ovon:base-cu113 .
+
+# 2) 构建 update（之后每次改代码只重建这层，秒级/分钟级）
+docker build --no-cache --build-arg github_access_token=${GITHUB_TOKEN} -f Dockerfile.update -t swr.cn-east-3.myhuaweicloud.com/meadow/ovon:dev-cu113_v0.1  .
+
+# 3) 运行(可挂载数据目录）
+docker run -it --rm --gpus all --shm-size=8g -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics -v /root/workspace/lab/ovon/data:/workspace/ovon/data ovon:dev-cu113 bash
+
+# delete none images
+docker images -f "dangling=true" -q | xargs -r docker rmi
+
+# 容器内即可直接使(环境已就绪）
+python -m ovon.run --help
+
+
+docker cp /usr/share/glvnd/egl_vendor.d/10_nvidia.json jolly_pare:/usr/share/glvnd/egl_vendor.d/10_nvidia.jso
+docker cp /etc/apt/sources.list jolly_pare:/etc/apt/sources.list
+
+text: python -m ovon.run   --run-type train   --exp-config config/experiments/202509/transformer_dagger.yaml
+
+
+### kubectl
+kubectl exec -it nav-ovon-train-689mp-nav-ovon-train-task-1919594415 -- /bin/bash
+
+kubectl get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints
+
+

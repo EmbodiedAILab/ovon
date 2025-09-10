@@ -1,0 +1,137 @@
+metadata:
+  name: nav-ovon-eval
+  namespace: argo
+spec:
+  priority: 100
+  templates:
+    - name: main
+      steps:
+        - - name: prepare-output-dir
+            template: prepare-output-dir
+        - - name: nav-ovon-eval-task
+            template: nav-ovon-eval-task
+      # 新增：准备节点 —— 创建 eval/{workflow.name} 目录
+    - name: prepare-output-dir
+      container:
+        image: swr.cn-east-3.myhuaweicloud.com/meadow/busybox:1.36 
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            set -eu
+            mkdir -p "/mnt/eval/{{workflow.name}}"
+            echo "Created: /mnt/eval/{{workflow.name}}"
+        volumeMounts:
+          - name: volume-data-platform
+            mountPath: /mnt/eval
+            subPath: data-platform/model/objnav/ovon/experiments/eval
+    - name: nav-ovon-eval-task
+        # for debug start
+      tolerations:
+        - key: "workflows.argoproj.io/workflow-template"
+          operator: "Equal"
+          value: "nav-ovon-train"
+          effect: "NoExecute"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: cce.cloud.com/cce-nodepool
+                  operator: In
+                  values: 
+                    - cce-z00562901-wf-v100-4
+                    - cce-z00562901-wf-v100
+                    - cce-z00562901-wf-nodepool-debug
+      container:
+        name: ''
+        image: swr.cn-east-3.myhuaweicloud.com/meadow/ovon:dev-cu113_v0.7
+        command:
+          - /bin/bash
+          - '-c'
+        args:
+          - |
+            # tail -f /dev/null
+            source shell_command.sh
+            set -Eeuo pipefail
+            set -x
+            chmod +x /workspace/ovon/pre_eval.sh /workspace/ovon/post_eval.sh
+            /workspace/ovon/pre_eval.sh
+
+            # copy the eval split to the val
+            origin_task_dataset=/mnt/data/task_datasets
+            target_split="val"
+            target_dataset_path=$TASK_DATASET_PATH
+            # 获取版本信息，data/task_datasets/*/{split}/{split}-json.gz，就是这里面的*部分
+            part=${target_dataset_path#*task_datasets/}
+            # 去掉 split 及后面的部分 ，获取版本比如ovon/hm3d/v1/
+            dataset_version=${part%/*/*}
+
+            eval_split=$EVAL_SPLIT
+            split=$(basename "$(dirname "$target_dataset_path")")
+            target_dataset_dir=${target_dataset_path%/$split/*}
+            mkdir -p $target_dataset_dir
+            cp -r $origin_task_dataset/$dataset_version/${eval_split} $target_dataset_dir
+            mv ${target_dataset_dir}/${eval_split}/ $target_dataset_dir/${target_split}
+            mv ${target_dataset_dir}/${target_split}/${eval_split}.json.gz $target_dataset_dir/${target_split}/${target_split}.json.gz
+
+            log_and_execute python -m ovon.run \
+              --run-type eval \
+              --exp-config {{workflow.parameters.exp-config}} \
+              habitat_baselines.eval_ckpt_path_dir=/workspace/ovon/ckpt/{{workflow.parameters.habitat_baselines__eval_ckpt_path_dir}}
+            
+            /workspace/ovon/post_eval.sh
+        env:
+          - name: WORKFLOW_NAME
+            value: '{{workflow.name}}'
+          - name: EXP_CONFIG
+            value: '{{workflow.parameters.exp-config}}'
+          - name: NVIDIA_DRIVER_CAPABILITIES
+            value: "compute,utility,graphics"
+          - name: EVAL_CKPT_PATH_DIR
+            value: '{{workflow.parameters.habitat_baselines__eval_ckpt_path_dir}}'
+          - name: TASK_DATASET_PATH
+            value: '{{workflow.parameters.task_datasets_path}}'
+          - name: EVAL_SPLIT
+            value: '{{workflow.parameters.eval_split}}'
+        resources:
+          limits:
+            nvidia.com/gpu: '1'
+        volumeMounts:
+          - name: volume-data-platform
+            mountPath: >-
+              /mnt/data/task_datasets
+            subPath: data-platform/data/task_datasets
+          - name: volume-data-platform
+            mountPath: /workspace/ovon/data/scene_datasets/hm3d
+            subPath: data-platform/data/scene_datasets/hm3d_v0.2
+          - name: volume-data-platform
+            mountPath: /workspace/ovon/output
+            subPath: data-platform/model/objnav/ovon/experiments/eval/{{workflow.name}}
+          - name: volume-data-platform
+            mountPath: /workspace/ovon/ckpt
+            subPath: data-platform/model/objnav/ovon/experiments/train
+          - name: dshm
+            mountPath: /dev/shm
+  entrypoint: main
+  arguments:
+    parameters:
+      - name: habitat_baselines__num_environments
+        value: 8
+      - name: task_datasets_path
+        value: 'data/task_datasets/ovon/hm3d/v1/{split}/{split}.json.gz'
+      - name: eval_split
+        value: val_seen
+      - name: exp-config
+        value: config/experiments/202509/transformer_dagger_quick_debug.yaml
+      - name: habitat_baselines__eval_ckpt_path_dir
+        value: nav-ovon-train-quick-test/checkpoints/latest.pth
+  volumes:
+    - name: volume-data-platform
+      persistentVolumeClaim:
+        claimName: pvc-data-platform
+    - name: dshm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 8Gi
+  imagePullSecrets:
+    - name: default-secret
