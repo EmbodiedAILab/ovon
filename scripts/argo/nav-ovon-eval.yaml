@@ -57,27 +57,13 @@ spec:
             chmod +x /workspace/ovon/pre_eval.sh /workspace/ovon/post_eval.sh
             /workspace/ovon/pre_eval.sh
 
-            # copy the eval split to the val
-            origin_task_dataset=/mnt/data/task_datasets
-            target_split="val"
-            target_dataset_path=$TASK_DATASET_PATH
-            # 获取版本信息，data/task_datasets/*/{split}/{split}-json.gz，就是这里面的*部分
-            part=${target_dataset_path#*task_datasets/}
-            # 去掉 split 及后面的部分 ，获取版本比如ovon/hm3d/v1/
-            dataset_version=${part%/*/*}
-
-            eval_split=$EVAL_SPLIT
-            split=$(basename "$(dirname "$target_dataset_path")")
-            target_dataset_dir=${target_dataset_path%/$split/*}
-            mkdir -p $target_dataset_dir
-            cp -r $origin_task_dataset/$dataset_version/${eval_split} $target_dataset_dir
-            mv ${target_dataset_dir}/${eval_split}/ $target_dataset_dir/${target_split}
-            mv ${target_dataset_dir}/${target_split}/${eval_split}.json.gz $target_dataset_dir/${target_split}/${target_split}.json.gz
-
             log_and_execute python -m ovon.run \
               --run-type eval \
               --exp-config {{workflow.parameters.exp-config}} \
-              habitat_baselines.eval_ckpt_path_dir=/workspace/ovon/ckpt/{{workflow.parameters.habitat_baselines__eval_ckpt_path_dir}}
+              --checkpoint-config \
+              habitat_baselines.eval_ckpt_path_dir=/workspace/ovon/ckpt/{{workflow.parameters.habitat_baselines__eval_ckpt_path_dir}} \
+              habitat_baselines.eval.split={{workflow.parameters.eval_split}} \
+              'habitat.dataset.data_path="{{workflow.parameters.task_datasets_path}}"'
             
             /workspace/ovon/post_eval.sh
         env:
@@ -99,7 +85,7 @@ spec:
         volumeMounts:
           - name: volume-data-platform
             mountPath: >-
-              /mnt/data/task_datasets
+              /workspace/ovon/data/task_datasets
             subPath: data-platform/data/task_datasets
           - name: volume-data-platform
             mountPath: /workspace/ovon/data/scene_datasets/hm3d
