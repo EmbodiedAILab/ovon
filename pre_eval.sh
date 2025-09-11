@@ -23,7 +23,6 @@ else
 fi
 
 # 获取/workspace/ovon github仓库的分支 写/workspace/ovon/output/experiments_log
-
 # === 读取 Git 分支与提交信息 ===
 if [[ -d "$REPO_DIR/.git" ]]; then
   # 当前分支名（若处于分离头指针，会返回 HEAD）
@@ -45,6 +44,29 @@ if [[ -z "${EXP_CONFIG}" ]]; then
 else
   log "exp_config_path=${EXP_CONFIG_PATH}"
 fi
+
+EVAL_SPLIT="${eval_split:-${EVAL_SPLIT:-}}"
+if [[ -z "${EVAL_SPLIT}" ]]; then
+  log "WARN: 环境变量 eval_split/ EVAL_SPLIT未设置。"
+else
+  log "eval_split=${EVAL_SPLIT}"
+fi
+
+TASK_DATASET_PATH="${task_dataset_path:-${TASK_DATASET_PATH:-}}"
+if [[ -z "${TASK_DATASET_PATH}" ]]; then
+  log "WARN: 环境变量 task_dataset_path/ TASK_DATASET_PATH"
+else
+  log "task_dataset_path=${TASK_DATASET_PATH}"
+fi
+
+
+EVAL_CKPT_PATH_DIR="${eval_ckpt_path_dir:-${EVAL_CKPT_PATH_DIR:-}}"
+if [[ -z "${EVAL_CKPT_PATH_DIR}" ]]; then
+  log "WARN: 环境变量 eval_ckpt_path_dir/ EVAL_CKPT_PATH_DIR"
+else
+  log "eval_ckpt_path_dir=${EVAL_CKPT_PATH_DIR}"
+fi
+
 
 cp ${EXP_CONFIG_PATH} $OUTPUT_DIR/config.yaml
 
