@@ -20,6 +20,16 @@ RUN mkdir -p /usr/share/glvnd/egl_vendor.d && \
 ENV __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_nvidia.json
 
 
+# install huggingface_hub
+RUN pip install --no-cache-dir "huggingface_hub[cli]"
+# set cache dir
+ENV HF_HOME=/root/.cache/huggingface
+#models we need
+RUN huggingface-cli download timm/vit_base_patch16_siglip_256.v2_webli --repo-type model --revision main && \
+    huggingface-cli download timm/ViT-B-16-SigLIP-256                 --repo-type model --revision main && \
+    huggingface-cli download google/siglip-base-patch16-224           --repo-type model --revision main
+
+
 # Copy your changing code in (avoid data via .dockerignore)
 WORKDIR /workspace/ovon
 #COPY . /workspace/ovon
@@ -33,8 +43,6 @@ RUN conda run -n $CONDA_ENV pip install -e . && \
 # cp text_embeddings to data 
 RUN mkdir /workspace/ovon/data && cd /workspace/ovon
 COPY ./data/text_embeddings/ /workspace/ovon/data/text_embeddings/
-# cp huggingface cache to images
-COPY ./data/huggingface/ /root/.cache/huggingface/
 
 
 # 默认启动（可按需替换为你的训练/评估命令）
