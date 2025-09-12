@@ -18,8 +18,8 @@ spec:
         args:
           - |
             set -eu
-            mkdir -p "/mnt/eval/{{workflow.name}}"
-            echo "Created: /mnt/eval/{{workflow.name}}"
+            mkdir -p "/mnt/eval/{{workflow.parameters.experiments_output_dir}}"
+            echo "Created: /mnt/eval/{{workflow.parameters.experiments_output_dir}}"
         volumeMounts:
           - name: volume-data-platform
             mountPath: /mnt/eval
@@ -61,6 +61,9 @@ spec:
               --run-type eval \
               --exp-config {{workflow.parameters.exp-config}} \
               --checkpoint-config \
+              habitat_baselines.tensorboard_dir="output/tb" \
+              habitat_baselines.checkpoint_folder="output/checkpoints" \
+              habitat_baselines.log_file="output/habitat.log" \
               habitat_baselines.eval_ckpt_path_dir=/workspace/ovon/ckpt/{{workflow.parameters.habitat_baselines__eval_ckpt_path_dir}} \
               habitat_baselines.eval.split={{workflow.parameters.eval_split}} \
               'habitat.dataset.data_path="{{workflow.parameters.task_datasets_path}}"'
@@ -92,7 +95,7 @@ spec:
             subPath: data-platform/data/scene_datasets/hm3d_v0.2
           - name: volume-data-platform
             mountPath: /workspace/ovon/output
-            subPath: data-platform/model/objnav/ovon/experiments/eval/{{workflow.name}}
+            subPath: data-platform/model/objnav/ovon/experiments/eval/{{workflow.parameters.experiments_output_dir}}
           - name: volume-data-platform
             mountPath: /workspace/ovon/ckpt
             subPath: data-platform/model/objnav/ovon/experiments/train
@@ -111,6 +114,8 @@ spec:
         value: config/experiments/202509/transformer_dagger_quick_debug.yaml
       - name: habitat_baselines__eval_ckpt_path_dir
         value: nav-ovon-train-quick-test/checkpoints/latest.pth
+      - name: experiments_output_dir
+        value: "{{workflow.name}}_{{workflow.creationTimestamp.Y}}{{workflow.creationTimestamp.m}}{{workflow.creationTimestamp.d}}"
   volumes:
     - name: volume-data-platform
       persistentVolumeClaim:
