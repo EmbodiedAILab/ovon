@@ -18,8 +18,8 @@ spec:
         args:
           - |
             set -eu
-            mkdir -p "/mnt/train/{{workflow.name}}"
-            echo "Created: /mnt/train/{{workflow.name}}"
+            mkdir -p "/mnt/train/{{workflow.parameters.experiments_output_dir}}"
+            echo "Created: /mnt/train/{{workflow.parameters.experiments_output_dir}}"
         volumeMounts:
           - name: volume-data-platform
             mountPath: /mnt/train
@@ -66,6 +66,9 @@ spec:
               -m ovon.run \
               --run-type train \
               --exp-config {{workflow.parameters.exp-config}} \
+              habitat_baselines.tensorboard_dir="output/tb" \
+              habitat_baselines.checkpoint_folder="output/checkpoints" \
+              habitat_baselines.log_file="output/habitat.log" \
               habitat_baselines.num_environments={{workflow.parameters.habitat_baselines__num_environments}} \
               habitat_baselines.total_num_steps={{workflow.parameters.habitat_baselines__total_num_steps}} \
               habitat.dataset.split={{workflow.parameters.train_split}} \
@@ -94,7 +97,7 @@ spec:
             subPath: data-platform/data/scene_datasets/hm3d_v0.2
           - name: volume-data-platform
             mountPath: /workspace/ovon/output
-            subPath: data-platform/model/objnav/ovon/experiments/train/{{workflow.name}}
+            subPath: data-platform/model/objnav/ovon/experiments/train/{{workflow.parameters.experiments_output_dir}}
           - name: dshm
             mountPath: /dev/shm
   entrypoint: main
@@ -110,6 +113,8 @@ spec:
         value: 80000
       - name: exp-config
         value: config/experiments/202509/transformer_dagger_quick_debug.yaml
+      - name: experiments_output_dir
+        value: "{{workflow.name}}_{{workflow.creationTimestamp.Y}}{{workflow.creationTimestamp.m}}{{workflow.creationTimestamp.d}}"
   volumes:
     - name: volume-data-platform
       persistentVolumeClaim:
