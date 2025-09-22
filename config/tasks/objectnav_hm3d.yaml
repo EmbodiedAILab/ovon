@@ -15,7 +15,7 @@ habitat:
     turn_angle: 30
     tilt_angle: 30
     forward_step_size: 0.25
-    action_space_config: "v1"
+    action_space_config: "v0"
     agents:
       main_agent:
         sim_sensors:

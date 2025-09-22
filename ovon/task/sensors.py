@@ -375,7 +375,8 @@ class DemonstrationSensor(Sensor):
         if task._is_resetting:  # reset
             self.timestep = 1
 
-        if self.timestep < len(episode.reference_replay):
+        if self.timestep < len(episode.reference_replay) and hasattr(episode, 'reference_replay') and\
+           len(episode.reference_replay) > 0:
             action_name = episode.reference_replay[self.timestep].action
             action = get_habitat_sim_action(action_name)
         else:

@@ -8,11 +8,14 @@ from habitat.config.default_structured_configs import (
     MeasurementConfig,
     SimulatorConfig,
 )
+from habitat.core.dataset import EpisodeIterator
+
 from habitat_baselines.config.default_structured_configs import (
     HabitatBaselinesBaseConfig,
     HabitatBaselinesRLConfig,
     PolicyConfig,
     RLConfig,
+    EvalConfig,
 )
 from hydra.core.config_search_path import ConfigSearchPath
 from hydra.core.config_store import ConfigStore
@@ -198,6 +201,8 @@ class OVONPolicyConfig(PolicyConfig):
         default_factory=lambda: TransformerConfig()
     )
 
+    cycle_round: int = 1
+
 
 @dataclass
 class OVONRLConfig(RLConfig):
@@ -225,6 +230,17 @@ cs.store(
     name="habitat_config_base",
     node=OVONHabitatConfig,
 )
+
+@dataclass
+class CloudRoboEvalConfig(EvalConfig):
+    traj_dir: str = "output/traj/content/"
+
+cs.store(
+    name="cloudrobo_eval_config",  # 为新配置定义一个名称
+    group="habitat_baselines/eval",  # 指定配置组，通常与原有配置的组一致
+    node=CloudRoboEvalConfig,  # 注册你扩展后的配置类
+)
+
 
 cs.store(
     package="habitat.task.lab_sensors.clip_objectgoal_sensor",
