@@ -3,7 +3,7 @@
 # ================================================
 FROM swr.cn-east-3.myhuaweicloud.com/meadow/ovon:base-cu113
 
-ARG OVON_BRANCH_TAG=hqk-dev
+ARG OVON_BRANCH_TAG=fsq_develop
 ARG github_access_token="xxx"
 
 # 和 base 保持一致的 env 名称

@@ -2,6 +2,7 @@
 
 defaults:
   - /habitat_baselines: habitat_baselines_rl_config_base
+  - /habitat_baselines/eval: cloudrobo_eval_config
   - /habitat_baselines/rl/policy/obs_transforms:
     - resize
     - relabel_teacher_actions
@@ -16,6 +17,7 @@ habitat:
   environment:
     iterator_options:
       max_scene_repeat_steps: 50000
+      cycle: True
   task:
     type: "ObjectNav-v2"
     success_reward: 2.5
@@ -38,16 +40,17 @@ habitat:
 
 habitat_baselines:
   torch_gpu_id: 0
-  tensorboard_dir: "tb/BC_L3_20250904"
+  tensorboard_dir: "output/tb/"
   video_dir: "video_dir"
   test_episode_count: -1
   eval_ckpt_path_dir: "data/new_checkpoints"
   num_environments: 16
-  checkpoint_folder: "data/new_checkpoints"
+  checkpoint_folder: "output/checkpoints"
+  log_file: output/habitat.log
   trainer_name: "ver_il"
   num_updates: -1
-  total_num_steps: 300000000
-  log_interval: 10
+  total_num_steps: 15000000
+  log_interval: 1
   num_checkpoints: 50
   # Force PyTorch to be single threaded as
   # this improves performance considerably
@@ -55,6 +58,7 @@ habitat_baselines:
 
   eval:
     split: "val"
+    traj_dir: "output/traj/content/"
 
   rl:
     policy:
@@ -76,6 +80,7 @@ habitat_baselines:
         n_mlp_hidden: 1024
         max_context_length: 100
         shuffle_pos_id_for_update: True
+      cycle_round: 1
 
     ppo:
       # ppo params
@@ -113,3 +118,4 @@ habitat_baselines:
       train_encoder: False
       # Whether or not to reset the critic linear layer
       reset_critic: True
+      force_distributed: True
