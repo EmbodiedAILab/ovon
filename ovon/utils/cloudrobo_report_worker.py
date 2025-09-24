@@ -166,7 +166,7 @@ class CloudRoboReportWorkerProcess(ProcessBase):
             self.stats_this_rollout[k].append(v)
         
         self.statistics_episodes(data)
-        return self.get_env_status()
+        return False
 
     def statistics_episodes(self, data):
         tmp_episode_key = data["episodes"]["rank_env"]
@@ -513,6 +513,7 @@ class CloudRoboReportWorker(WorkerBase):
         self.report_queue.put(
             (ReportWorkerTasks.episode_end, {})
         )
+
         return self.response_queue.get()
 
 

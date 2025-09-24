@@ -128,7 +128,7 @@ class OVONTransformerNet(OVONNet):
                     step_id = step_id.unsqueeze(1)
                 elif step_id.dim() == 2 and step_id.size(0) == 1:
                     step_id = step_id.transpose(0, 1)
-            rnn_build_seq_info["step_id"] = observations["step_id"]
+            rnn_build_seq_info["step_id"] = step_id
         return super().forward(
             observations,
             rnn_hidden_states,
