@@ -4,6 +4,20 @@ import gzip
 from habitat.core.dataset import BaseEpisode
 
 
+def get_habitat_sim_action_too_str(action):
+    if action == 0:
+        return "STOP"
+    elif action == 1:
+        return "MOVE_FORWARD"
+    elif action == 2:
+        return "TURN_LEFT"
+    elif action == 3:
+        return "TURN_RIGHT"
+    elif action == 4:
+        return "LOOK_UP"
+    elif action == 5:
+        return "LOOK_DOWN"
+
 all_datasets = {}
 
 def get_scene_name(scene_id):
@@ -37,7 +51,8 @@ def record_trajectory_process(actions, current_episodes:BaseEpisode):
         scene_name = get_scene_name(current_episode.scene_id)
         episode_id = int(current_episode.episode_id)
         record = {}
-        record["action"] = action
+        action_str = get_habitat_sim_action_too_str(action)
+        record["action"] = action_str
         record["agent_state"] = {}
         all_datasets[scene_name]["episodes"][episode_id]["reference_replay"].append(record)
             
