@@ -23,6 +23,7 @@ from habitat_baselines.rl.ppo.policy import NetPolicy
 from habitat_baselines.rl.ver.ver_rollout_storage import VERRolloutStorage
 from habitat_baselines.utils.common import (
     CategoricalNet,
+    CustomFixedCategorical,
     GaussianNet,
     LagrangeInequalityCoefficient,
     inference_mode,
@@ -270,6 +271,7 @@ class DAggerPolicyMixin:
             observations, rnn_hidden_states, prev_actions, masks
         )
         distribution = self.action_distribution(features)
+        distribution = CustomFixedCategorical(logits=distribution.logits[:, :4])
 
         with torch.no_grad():
             if deterministic:
