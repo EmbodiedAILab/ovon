@@ -1091,7 +1091,11 @@ class VERTransformerTrainer(VERTrainer):
 
         self.envs.close()
 
-        record_trajectory_close(self.config.habitat_baselines.eval.traj_dir)
+        filename = checkpoint_path.split('/')[-1]
+        base_name = filename.split('.pth')[0]
+        new_name = base_name.replace('.', '_')
+        save_traj_path = os.path.join(self.config.habitat_baselines.eval.traj_dir, new_name)
+        record_trajectory_close(save_traj_path)
 
 
     def is_done(self) -> bool:
