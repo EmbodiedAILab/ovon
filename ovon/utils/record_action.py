@@ -62,9 +62,10 @@ def record_trajectory_close(traj_dir):
 
     if not os.path.exists(traj_dir):  # 检查路径是否存在
         os.makedirs(traj_dir)
-    
+
     for scene_name, dataset in all_datasets.items():
-        with open(traj_dir + scene_name + ".json.gz", "wt") as f:
+        save_path = os.path.join(traj_dir, scene_name + ".json.gz")
+        with open(save_path, "wt") as f:
             json.dump(dataset, f, indent=2)  # indent参数保持可读性
     
     return
