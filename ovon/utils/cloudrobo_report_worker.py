@@ -159,14 +159,14 @@ class CloudRoboReportWorkerProcess(ProcessBase):
 
     def episode_end(self, data):              
         if data == {}:
-            return self.get_env_status()
+            self.get_env_status()
+            return
 
         self.stats_this_rollout["reward"].append(data["reward"])
         for k, v in self._extract_scalars_from_info(data["info"]):
             self.stats_this_rollout[k].append(v)
         
         self.statistics_episodes(data)
-        return False
 
     def statistics_episodes(self, data):
         tmp_episode_key = data["episodes"]["rank_env"]
