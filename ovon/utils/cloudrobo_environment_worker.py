@@ -118,7 +118,7 @@ class CloudRoboEnvironmentWorkerProcess(EnvironmentWorkerProcess):
                 self.episode_counter.scene_used_dict[str(self.env.current_episode().scene_id)][str(self.env.current_episode().episode_id)] += 1
                 self.episode_counter.scene_used = len(self.episode_counter.scene_used_dict)
 
-                if self.episode_counter.episodes_completed == self.episode_counter.max_episodes:
+                if self.episode_counter.episodes_completed % self.episode_counter.max_episodes == 0:
                     self.cycle_round += 1
                     if self.cycle_round >= self.env_config.habitat_baselines.rl.policy.cycle_round:
                         self.episode_counter.cycle_finish = True
