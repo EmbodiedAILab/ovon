@@ -35,7 +35,7 @@ class ClipObjectGoalEmbeding:
 
 
 
-config_dir = "/home/fsq/ovon_upload/ovon/ovon/limo/transformer_il.yaml"
+config_dir = "transformer_il.yaml"
 config = get_config(config_dir)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -60,7 +60,7 @@ actor_critic = policy.from_config(
                     orig_action_space=action_space,
                 )
 
-checkpoint_path = "/home/fsq/ovon_upload/ovon/output/checkpoints/ckpt.1.pth"
+checkpoint_path = "ckpt.43.pth"
 ckpt = torch.load(checkpoint_path, map_location="cpu")
 
 ppo_cfg = config.habitat_baselines.rl.ppo
@@ -68,7 +68,7 @@ agent = PPO.from_config(actor_critic, ppo_cfg)
 agent.actor_critic.load_state_dict(ckpt["state_dict"], strict=False)
 actor_critic = agent.actor_critic.to(device)
 
-image_path = "/home/fsq/ovon_upload/ovon/ovon/limo/Snipaste_2025-10-13_11-06-46.png"
+image_path = "Snipaste_2025-10-13_11-06-46.png"
 image = Image.open(image_path).convert('RGB')
 rgb_array = np.array(image)
 

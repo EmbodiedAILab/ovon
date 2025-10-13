@@ -24,7 +24,7 @@ habitat:
     slack_reward: -1e-3
     lab_sensors:
       clip_objectgoal_sensor:
-        cache: data/text_embeddings/siglip_6.pkl
+        cache: siglip_6.pkl
     measurements:
       success:
         success_distance: 0.1
