@@ -23,8 +23,8 @@ habitat:
             width: 640
             height: 480
             hfov: 79
-            position: [0, 0.88, 0]
-        height: 0.88
+            position: [0, 0.2, 0]
+        height: 0.2
         radius: 0.18
     habitat_sim_v0:
       gpu_device_id: 0
