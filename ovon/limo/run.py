@@ -119,7 +119,7 @@ test_recurrent_hidden_states = torch.zeros(
 
 action_value = action.item()
 if action_value >= 4:
-    new_action = torch.randint(0, 4, (1, 1), device=action.device)
+    new_action = torch.randint(1, 4, (1, 1), device=action.device)
     action.copy_(new_action)
 
 prev_actions_tensor.copy_(action)  # 更新历史动作
@@ -216,7 +216,7 @@ class OVON2Limo:
 
         action_value = action.item()
         if action_value >= 4:
-            new_action = torch.randint(0, 4, (1, 1), device=action.device)
+            new_action = torch.randint(1, 4, (1, 1), device=action.device)
             action.copy_(new_action)
 
         self.prev_actions_tensor.copy_(action)  # 更新历史动作
