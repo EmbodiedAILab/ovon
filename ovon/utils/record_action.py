@@ -38,6 +38,10 @@ def record_trajectory_start(input_path, split_name):
             origin_dataset = json.load(f_in)
             for ep in origin_dataset["episodes"]:
                 ep["reference_replay"] = []
+                record = {}
+                record["action"] = "STOP"
+                record["agent_state"] = {}
+                ep["reference_replay"].append(record)
             
             scene_name = get_scene_name(origin_dataset["episodes"][0]["scene_id"])
             
