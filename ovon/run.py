@@ -104,6 +104,7 @@ def main():
     with read_write(config):
         edit_config(config, args)
 
+    print("config:", config)
     execute_exp(config, args.run_type)
 
 
@@ -239,6 +240,9 @@ def edit_config(config, args):
                 "relabel_teacher_actions"
             )
 
+    for k in ["look_up", "look_down"]:
+        if k in config.habitat.task.actions:
+            config.habitat.task.actions.pop(k)
 
 if __name__ == "__main__":
     main()

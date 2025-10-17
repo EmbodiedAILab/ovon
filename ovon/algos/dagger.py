@@ -271,7 +271,6 @@ class DAggerPolicyMixin:
             observations, rnn_hidden_states, prev_actions, masks
         )
         distribution = self.action_distribution(features)
-        distribution = CustomFixedCategorical(logits=distribution.logits[:, :4])
 
         with torch.no_grad():
             if deterministic:
