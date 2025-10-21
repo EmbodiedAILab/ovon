@@ -38,6 +38,10 @@ def record_trajectory_start(input_path, split_name):
             origin_dataset = json.load(f_in)
             for ep in origin_dataset["episodes"]:
                 ep["reference_replay"] = []
+                record = {}
+                record["action"] = "STOP"
+                record["agent_state"] = {}
+                ep["reference_replay"].append(record)
             
             scene_name = get_scene_name(origin_dataset["episodes"][0]["scene_id"])
             
@@ -65,7 +69,7 @@ def record_trajectory_close(traj_dir):
 
     for scene_name, dataset in all_datasets.items():
         save_path = os.path.join(traj_dir, scene_name + ".json.gz")
-        with open(save_path, "wt") as f:
-            json.dump(dataset, f, indent=2)  # indent参数保持可读性
+        with gzip.open(save_path, "wt", encoding='utf-8') as f:
+            json.dump(dataset, f, indent=4)  # indent参数保持可读性
     
     return
