@@ -23,7 +23,6 @@ from habitat_baselines.rl.ppo.policy import NetPolicy
 from habitat_baselines.rl.ver.ver_rollout_storage import VERRolloutStorage
 from habitat_baselines.utils.common import (
     CategoricalNet,
-    CustomFixedCategorical,
     GaussianNet,
     LagrangeInequalityCoefficient,
     inference_mode,
