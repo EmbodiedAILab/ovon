@@ -8,7 +8,6 @@ from habitat.config.default_structured_configs import (
     MeasurementConfig,
     SimulatorConfig,
 )
-from habitat.core.dataset import EpisodeIterator
 
 from habitat_baselines.config.default_structured_configs import (
     HabitatBaselinesBaseConfig,
