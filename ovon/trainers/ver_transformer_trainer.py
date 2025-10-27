@@ -793,6 +793,7 @@ class VERTransformerTrainer(VERTrainer):
         config = self._get_resume_state_config_or_new_config(
             ckpt_dict["config"]
         )
+        config = self.config
 
         ppo_cfg = config.habitat_baselines.rl.ppo
 
@@ -1101,6 +1102,10 @@ class VERTransformerTrainer(VERTrainer):
     def is_done(self) -> bool:
         local_done = self.episode_finish or (self.percent_done() >= 1.0)
         local_rank, world_size, _ = get_distrib_size() # 假设这个函数能返回rank和world_size
+        
+        # 单进程直接返回
+        if not self._is_distributed:
+            return local_done
 
         if local_rank == 0:
             # Rank 0 收集所有信息或自行判断全局条件

@@ -353,8 +353,6 @@ class CloudRoboReportWorkerProcess(ProcessBase):
                 
                 details = " ".join(f"{k}: {v}" for k, v in all_episodes_process_sum.items())
                 logger.info("Episodes used: %s step: %s", details, str(n_steps))
-                # if all_episodes_process_sum["max_episodes"] == all_episodes_process_sum["episodes_completed"]:
-                #     EXIT.set()
 
     def num_steps_collected(self, num_steps: int):
         self.steps_delta = num_steps
