@@ -39,8 +39,7 @@ class GaussianSplattingRGBSensorConfig(LabSensorConfig):
     height: int = 480
     hfov: int = 79
     position: List[float] = field(default_factory=lambda: [0, 0.88, 0])
-    data_platform_dir: str = "/root/data-platform/"
-    reconstruction_scene_assets_dir: str = "reconstruction_scene_assets"
+    reconstruction_scene_assets_dir: str = "data/reconstruction_scene_assets/"
 
 
 @dataclass

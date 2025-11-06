@@ -417,11 +417,7 @@ class GaussianSplattingRGBSensor(Sensor):
         self.cam_setting = habitat_sensor_to_CamSettings(width, height, hfov)
 
         data_platform_dir = getattr(config, 'data_platform_dir', './data/3dgs')
-        reconstruction_scene_assets_dir = getattr(config, 'reconstruction_scene_assets_dir', 'scenes')
-        self.scene_base_path = os.path.join(
-            data_platform_dir,
-            reconstruction_scene_assets_dir
-        )
+        self.scene_base_path = getattr(config, 'reconstruction_scene_assets_dir', 'data/reconstruction_scene_assets/')
 
     def _get_sensor_type(self, *args: Any, **kwargs: Any):
         return SensorTypes.SEMANTIC

@@ -21,8 +21,8 @@ def get_habitat_sim_action_too_str(action):
 all_datasets = {}
 
 def get_scene_name(scene_id):
-    folder_part = scene_id.split('/')[-2]
-    scene_name = folder_part.split('-')[1]
+    full_filename = os.path.basename(scene_id)
+    scene_name = full_filename.split('.')[0]
     return scene_name
 
 def record_trajectory_start(input_path, split_name):
