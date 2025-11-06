@@ -28,8 +28,7 @@ habitat:
         cache: data/text_embeddings/siglip_7.pkl
       gaussian_splatting_rgb_sensor:
         type: "GaussianSplattingRGBSensor"
-        data_platform_dir: "/root/data-platform/"
-        reconstruction_scene_assets_dir: "reconstruction_scene_assets"
+        reconstruction_scene_assets_dir: "data/reconstruction_scene_assets"
         width: 640
         height: 480
         hfov: 79
