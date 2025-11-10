@@ -34,9 +34,7 @@ habitat:
   dataset:
     type: "ObjectNav-v1"
     split: train
-    data_path: "data/task_datasets/objectnav/cloudrobo_v1_l3mvn_0-100_filter_look_action/{split}/{split}.json.gz"
-    scenes_dir: "data/scene_datasets"
-    content_scenes: ["*"]
+    data_path: data/datasets/objectnav/hm3d/v2/{split}/{split}.json.gz
   simulator:
     type: "OVONSim-v0"
 
@@ -46,13 +44,13 @@ habitat_baselines:
   video_dir: "video_dir"
   test_episode_count: -1
   eval_ckpt_path_dir: "data/new_checkpoints"
-  num_environments: 1
+  num_environments: 10
   checkpoint_folder: "output/checkpoints"
   log_file: output/habitat.log
   trainer_name: "ver_il"
   num_updates: -1
   total_num_steps: 15000000
-  log_interval: 5
+  log_interval: 10
   num_checkpoints: 50
   # Force PyTorch to be single threaded as
   # this improves performance considerably
@@ -120,4 +118,4 @@ habitat_baselines:
       train_encoder: False
       # Whether or not to reset the critic linear layer
       reset_critic: True
-      force_distributed: False
+      force_distributed: True
