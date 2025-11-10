@@ -4,3 +4,6 @@
 [submodule "frontier_exploration"]
 	path = frontier_exploration
 	url = https://github.com/naokiyokoyama/frontier_exploration.git
+[submodule "panoptic_gs"]
+	path = panoptic_gs
+	url = git@github.com:EmbodiedAILab/panoptic_gs.git
