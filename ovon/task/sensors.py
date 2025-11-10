@@ -15,8 +15,8 @@ from ovon.task.object_nav_task import ObjectNavigationTask
 from ovon.utils.utils import load_pickle
 import os 
 
-from pano_gs.gs_simulator import GsSimulator
-from pano_gs.gs_simulator.sim_camera.habitat_cam import (
+from panoptic_gs.gs_simulator import GsSimulator
+from panoptic_gs.gs_simulator.sim_camera.habitat_cam import (
     habitat_sensor_to_CamSettings,
     construct_viewpoint_cam_from_agent_state
 )
