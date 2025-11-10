@@ -11,6 +11,7 @@ defaults:
     - clip_objectgoal_sensor
     - step_id_sensor
     - next_actions_sensor
+    - gaussian_splatting_rgb_sensor
   - _self_
 
 habitat:
@@ -24,7 +25,14 @@ habitat:
     slack_reward: -1e-3
     lab_sensors:
       clip_objectgoal_sensor:
-        cache: data/text_embeddings/siglip_6.pkl
+        cache: data/text_embeddings/siglip_7.pkl
+      gaussian_splatting_rgb_sensor:
+        type: "GaussianSplattingRGBSensor"
+        reconstruction_scene_assets_dir: "data/reconstruction_scene_assets"
+        width: 640
+        height: 480
+        hfov: 79
+        position: [0, 0.88, 0]
     measurements:
       success:
         success_distance: 0.1
