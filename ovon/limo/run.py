@@ -53,7 +53,7 @@ class OVON2Limo:
     def __init__(
         self,
     ) -> None:
-        config_dir = "/workspace/ovon/config/experiments/transformer_il.yaml"
+        config_dir = "/workspace/ovon/transformer_il.yaml"
         config = get_config(config_dir)
 
         with read_write(config):
