@@ -4,7 +4,10 @@
 FROM swr.cn-east-3.myhuaweicloud.com/meadow/ovon:base-cu113
 
 ARG OVON_BRANCH_TAG=fsq_develop
-ARG github_access_token="xxx"
+ARG GITHUB_USERNAME="xxx"
+ARG GITHUB_TOKEN="xxx"
+
+RUN echo "$GITHUB_TOKEN"
 
 # 和 base 保持一致的 env 名称
 ENV CONDA_DIR=/opt/conda \
@@ -33,7 +36,9 @@ RUN huggingface-cli download timm/vit_base_patch16_siglip_256.v2_webli --repo-ty
 # Copy your changing code in (avoid data via .dockerignore)
 WORKDIR /workspace/ovon
 #COPY . /workspace/ovon
-RUN git clone --branch "${OVON_BRANCH_TAG}" https://${github_access_token}@github.com/EmbodiedAILab/ovon.git /workspace/ovon && git submodule sync --recursive && git submodule update --init --recursive
+RUN git clone --branch "${OVON_BRANCH_TAG}" https://github.com/EmbodiedAILab/ovon.git /workspace/ovon && \
+        sed -i "s|url = git@github.com:EmbodiedAILab/panoptic_gs.git|url = https://${GITHUB_USERNAME}:${GITHUB_TOKEN}@github.com/EmbodiedAILab/panoptic_gs.git|" .gitmodules && \
+        git submodule sync --recursive && git submodule update --init --recursive
 
 # Install ovon repo & frontier_exploration in editable mode
 RUN conda run -n $CONDA_ENV pip install -e . && \
