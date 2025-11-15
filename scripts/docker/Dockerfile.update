@@ -32,6 +32,9 @@ RUN huggingface-cli download timm/vit_base_patch16_siglip_256.v2_webli --repo-ty
     huggingface-cli download timm/ViT-B-16-SigLIP-256                 --repo-type model --revision main && \
     huggingface-cli download google/siglip-base-patch16-224           --repo-type model --revision main
 
+# add 3dgs envs
+RUN apt-get update && apt-get install -y --no-install-recommends ninja-build
+RUN pip install --no-cache-dir plyfile
 
 # Copy your changing code in (avoid data via .dockerignore)
 WORKDIR /workspace/ovon
@@ -43,6 +46,7 @@ RUN git clone --branch "${OVON_BRANCH_TAG}" https://github.com/EmbodiedAILab/ovo
 # Install ovon repo & frontier_exploration in editable mode
 RUN conda run -n $CONDA_ENV pip install -e . && \
     conda run -n $CONDA_ENV pip install -e frontier_exploration && \
+    pip install panoptic_gs/submodules/diff-gaussian-rasterization && \
     conda clean -afy
 
 # cp text_embeddings to data 
