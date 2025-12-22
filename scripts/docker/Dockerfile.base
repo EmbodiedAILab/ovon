@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libdrm2 libgbm1 \
  && rm -rf /var/lib/apt/lists/*
 
+
 # Install Mambaforge (conda+mamba)
 RUN wget -q https://github.com/conda-forge/miniforge/releases/download/25.3.1-0/Miniforge3-25.3.1-0-Linux-x86_64.sh  -O /tmp/mambaforge.sh && \
     bash /tmp/mambaforge.sh -b -p $CONDA_DIR && rm -f /tmp/mambaforge.sh
@@ -45,6 +46,20 @@ RUN conda run -n $CONDA_ENV pip install \
       transformers==4.35.0 && \
     conda run -n $CONDA_ENV pip install "git+https://github.com/openai/CLIP.git" && \
     conda clean -afy
+
+# install huggingface_hub
+RUN pip install --no-cache-dir "huggingface_hub[cli]"
+# set cache dir
+ENV HF_HOME=/root/.cache/huggingface
+#models we need
+RUN huggingface-cli download timm/vit_base_patch16_siglip_256.v2_webli --repo-type model --revision main && \
+    huggingface-cli download timm/ViT-B-16-SigLIP-256                 --repo-type model --revision main && \
+    huggingface-cli download google/siglip-base-patch16-224           --repo-type model --revision main
+
+# add 3dgs envs
+RUN apt-get update && apt-get install -y --no-install-recommends ninja-build
+RUN pip install --no-cache-dir plyfile
+
 
 # Quick self-check
 CMD ["bash", "-lc", "python -c \"import torch,habitat_sim; print('OVON base ready. CUDA:', torch.cuda.is_available())\""]
