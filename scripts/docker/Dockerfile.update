@@ -1,10 +1,13 @@
 # ================================================
 # OVON Update Image — add repo code only
 # ================================================
-FROM swr.cn-east-3.myhuaweicloud.com/meadow/ovon:base-cu113
+FROM swr.cn-east-3.myhuaweicloud.com/meadow/ovon:base-cu113-v1218
 
-ARG OVON_BRANCH_TAG=hqk-dev
-ARG github_access_token="xxx"
+ARG OVON_BRANCH_TAG=fsq_develop
+ARG GITHUB_USERNAME="xxx"
+ARG GITHUB_TOKEN="xxx"
+
+RUN echo "$GITHUB_TOKEN"
 
 # 和 base 保持一致的 env 名称
 ENV CONDA_DIR=/opt/conda \
@@ -19,27 +22,39 @@ RUN mkdir -p /usr/share/glvnd/egl_vendor.d && \
 # force GLVND read this
 ENV __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_nvidia.json
 
-
-# install huggingface_hub
-RUN pip install --no-cache-dir "huggingface_hub[cli]"
 # set cache dir
 ENV HF_HOME=/root/.cache/huggingface
-#models we need
-RUN huggingface-cli download timm/vit_base_patch16_siglip_256.v2_webli --repo-type model --revision main && \
-    huggingface-cli download timm/ViT-B-16-SigLIP-256                 --repo-type model --revision main && \
-    huggingface-cli download google/siglip-base-patch16-224           --repo-type model --revision main
 
+RUN conda run -n $CONDA_ENV pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchaudio==0.12.1 --extra-index-url https://download.pytorch.org/whl/cu113
 
 # Copy your changing code in (avoid data via .dockerignore)
 WORKDIR /workspace/ovon
 #COPY . /workspace/ovon
-RUN git clone --branch "${OVON_BRANCH_TAG}" https://${github_access_token}@github.com/EmbodiedAILab/ovon.git /workspace/ovon && git submodule sync --recursive && git submodule update --init --recursive
+RUN git clone --branch "${OVON_BRANCH_TAG}" https://github.com/EmbodiedAILab/ovon.git /workspace/ovon && \
+        sed -i "s|url = git@github.com:EmbodiedAILab/panoptic_gs.git|url = https://${GITHUB_USERNAME}:${GITHUB_TOKEN}@github.com/EmbodiedAILab/panoptic_gs.git|" .gitmodules && \
+        git submodule sync --recursive && git submodule update --init --recursive
 
 # Install ovon repo & frontier_exploration in editable mode
 RUN conda run -n $CONDA_ENV pip install -e . && \
     conda run -n $CONDA_ENV pip install -e frontier_exploration && \
     conda clean -afy
 
+
+ENV TORCH_CUDA_ARCH_LIST="6.0;6.1;7.0;7.5;8.0;8.6+PTX"
+ENV FORCE_CUDA="1"
+ENV CUDA_HOME=/usr/local/cuda
+
+# 安装系统依赖
+RUN apt-get update && apt-get install -y build-essential cmake ninja-build
+
+# 安装 diff-gaussian-rasterization
+RUN cd /workspace/ovon/panoptic_gs && \
+    conda run -n $CONDA_ENV pip install --no-cache-dir --verbose submodules/diff-gaussian-rasterization || \
+    (echo "Fallback installation..." && \
+     cd submodules/diff-gaussian-rasterization && \
+     conda run -n $CONDA_ENV pip install --no-build-isolation -e .)
+
+ENV PYTHONPATH=$PYTHONPATH:/workspace/ovon/panoptic_gs/
 # cp text_embeddings to data 
 RUN mkdir /workspace/ovon/data && cd /workspace/ovon
 COPY ./data/text_embeddings/ /workspace/ovon/data/text_embeddings/

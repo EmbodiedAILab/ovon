@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, List
 
 from habitat.config.default_structured_configs import (
     CollisionsMeasurementConfig,
@@ -8,11 +8,13 @@ from habitat.config.default_structured_configs import (
     MeasurementConfig,
     SimulatorConfig,
 )
+
 from habitat_baselines.config.default_structured_configs import (
     HabitatBaselinesBaseConfig,
     HabitatBaselinesRLConfig,
     PolicyConfig,
     RLConfig,
+    EvalConfig,
 )
 from hydra.core.config_search_path import ConfigSearchPath
 from hydra.core.config_store import ConfigStore
@@ -29,6 +31,15 @@ class ClipObjectGoalSensorConfig(LabSensorConfig):
     type: str = "ClipObjectGoalSensor"
     prompt: str = "Find and go to {category}"
     cache: str = "data/clip_embeddings/ovon_hm3d_cache.pkl"
+
+@dataclass
+class GaussianSplattingRGBSensorConfig(LabSensorConfig):
+    type: str = "GaussianSplattingRGBSensor"
+    width: int = 640
+    height: int = 480
+    hfov: int = 79
+    position: List[float] = field(default_factory=lambda: [0, 0.88, 0])
+    reconstruction_scene_assets_dir: str = "data/reconstruction_scene_assets/"
 
 
 @dataclass
@@ -68,6 +79,9 @@ class CurrentEpisodeUUIDSensorConfig(LabSensorConfig):
 class StepIDSensorConfig(LabSensorConfig):
     type: str = "StepIDSensor"
 
+@dataclass
+class DemonstrationSensorConfig(LabSensorConfig):
+    type: str = "DemonstrationSensor"
 
 ##########################################################################
 # Measurements
@@ -195,6 +209,8 @@ class OVONPolicyConfig(PolicyConfig):
         default_factory=lambda: TransformerConfig()
     )
 
+    cycle_round: int = 1
+
 
 @dataclass
 class OVONRLConfig(RLConfig):
@@ -223,11 +239,29 @@ cs.store(
     node=OVONHabitatConfig,
 )
 
+@dataclass
+class CloudRoboEvalConfig(EvalConfig):
+    traj_dir: str = "output/traj/content/"
+
+cs.store(
+    name="cloudrobo_eval_config",  # 为新配置定义一个名称
+    group="habitat_baselines/eval",  # 指定配置组，通常与原有配置的组一致
+    node=CloudRoboEvalConfig,  # 注册你扩展后的配置类
+)
+
+
 cs.store(
     package="habitat.task.lab_sensors.clip_objectgoal_sensor",
     group="habitat/task/lab_sensors",
     name="clip_objectgoal_sensor",
     node=ClipObjectGoalSensorConfig,
+)
+
+cs.store(
+    package="habitat.task.lab_sensors.gaussian_splatting_rgb_sensor",
+    group="habitat/task/lab_sensors",
+    name="gaussian_splatting_rgb_sensor",
+    node=GaussianSplattingRGBSensorConfig,
 )
 
 cs.store(
@@ -263,6 +297,13 @@ cs.store(
     group="habitat/task/lab_sensors",
     name="step_id_sensor",
     node=StepIDSensorConfig,
+)
+
+cs.store(
+    package="habitat.task.lab_sensors.next_actions_sensor",
+    group="habitat/task/lab_sensors",
+    name="next_actions_sensor",
+    node=DemonstrationSensorConfig,
 )
 
 cs.store(

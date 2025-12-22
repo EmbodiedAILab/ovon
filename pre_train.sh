@@ -1,6 +1,8 @@
 #!/bin/bash
 set -Eeuo pipefail
 
+export PYTHONPATH=$PYTHONPATH:/workspace/ovon/panoptic_gs
+
 OUTPUT_DIR="/workspace/ovon/output"
 LOG_FILE="$OUTPUT_DIR/helper.log"
 REPO_DIR="/workspace/ovon"

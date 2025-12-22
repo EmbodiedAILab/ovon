@@ -2,7 +2,7 @@ import copy
 import os
 import random
 import time
-from typing import Dict, List
+from typing import Dict, List, Any
 
 import numpy as np
 import torch
@@ -37,9 +37,12 @@ from habitat_baselines.rl.ver.environment_worker import (
     build_action_plugin_from_policy_action_space,
     construct_environment_workers,
 )
+from ovon.utils.cloudrobo_environment_worker import (
+    construct_cloudrobo_environment_workers,
+)
 from habitat_baselines.rl.ver.preemption_decider import PreemptionDeciderWorker
-from habitat_baselines.rl.ver.report_worker import ReportWorker
 from habitat_baselines.rl.ver.task_enums import ReportWorkerTasks
+from ovon.utils.cloudrobo_report_worker import CloudRoboReportWorker
 from habitat_baselines.rl.ver.timing import Timing
 from habitat_baselines.rl.ver.ver_rollout_storage import VERRolloutStorage
 from habitat_baselines.rl.ver.worker_common import (
@@ -52,6 +55,8 @@ from habitat_baselines.utils.common import (
     get_num_actions,
     inference_mode,
     is_continuous_action_space,
+    batch_obs,
+    generate_video,
 )
 from omegaconf import DictConfig
 from torch.optim.lr_scheduler import LambdaLR
@@ -64,6 +69,28 @@ from ovon.trainers.inference_worker_with_kv import (
 )
 from ovon.trainers.ver_rollout_storage_with_kv import VERRolloutStorageWithKVCache
 from ovon.utils.lr_scheduler import PIRLNavLRScheduler
+
+
+import numpy as np
+import tqdm
+from omegaconf import OmegaConf
+from collections import defaultdict
+
+from habitat.config.default import get_agent_config
+from habitat.tasks.rearrange.rearrange_sensors import GfxReplayMeasure
+from habitat.tasks.rearrange.utils import write_gfx_replay
+from habitat.utils.render_wrapper import overlay_frame
+from habitat.utils.visualizations.utils import observations_to_image
+from habitat_baselines.common.obs_transformers import (
+    apply_obs_transforms_batch,
+
+)
+from habitat_baselines.common.tensorboard_utils import (
+    TensorboardWriter,
+)
+
+
+from ovon.utils.record_action import record_trajectory_start, record_trajectory_process, record_trajectory_close
 
 try:
     torch.backends.cudnn.allow_tf32 = True
@@ -78,6 +105,7 @@ class VERTransformerTrainer(VERTrainer):
     If the actor critic is NOT a transformer, the trainer will be the same as the
     VERTrainer.
     """
+    episode_finish: bool = False
 
     def _setup_actor_critic_agent(self, ppo_cfg: "DictConfig") -> None:
         r"""Sets up actor critic and agent for PPO.
@@ -189,7 +217,7 @@ class VERTransformerTrainer(VERTrainer):
 
         self.mp_ctx = torch.multiprocessing.get_context("forkserver")
         self.queues = WorkerQueues(self.config.habitat_baselines.num_environments)
-        self.environment_workers = construct_environment_workers(
+        self.environment_workers = construct_cloudrobo_environment_workers(
             self.config, self.mp_ctx, self.queues
         )
         [ew.start() for ew in self.environment_workers]
@@ -258,7 +286,7 @@ class VERTransformerTrainer(VERTrainer):
         ):
             run_id = resume_state["requeue_stats"]["report_worker_state"]["run_id"]
 
-        self.report_worker = ReportWorker(
+        self.report_worker = CloudRoboReportWorker(
             self.mp_ctx,
             get_free_port_distributed("report", tcp_store),
             self.config,
@@ -493,7 +521,8 @@ class VERTransformerTrainer(VERTrainer):
         """
         policy_cfg = self.config.habitat_baselines.rl.policy
         if not policy_cfg.finetune.enabled:
-            return super().train()
+            return self.ver_train()
+            # return super().train()
 
         torch.backends.cudnn.enabled = True
         torch.backends.cudnn.benchmark = False
@@ -731,3 +760,543 @@ class VERTransformerTrainer(VERTrainer):
                     ),
                 )
             )
+
+    def _eval_checkpoint(
+        self,
+        checkpoint_path: str,
+        writer: TensorboardWriter,
+        checkpoint_index: int = 0,
+    ) -> None:
+        r"""Evaluates a single checkpoint.
+
+        Args:
+            checkpoint_path: path of checkpoint
+            writer: tensorboard writer object for logging to tensorboard
+            checkpoint_index: index of cur checkpoint for logging
+
+        Returns:
+            None
+        """
+        if self._is_distributed:
+            raise RuntimeError("Evaluation does not support distributed mode")
+
+        # Map location CPU is almost always better than mapping to a CUDA device.
+        if self.config.habitat_baselines.eval.should_load_ckpt:
+            ckpt_dict = self.load_checkpoint(
+                checkpoint_path, map_location="cpu"
+            )
+            step_id = ckpt_dict["extra_state"]["step"]
+            print(step_id)
+        else:
+            ckpt_dict = {"config": None}
+
+        config = self._get_resume_state_config_or_new_config(
+            ckpt_dict["config"]
+        )
+        config = self.config
+
+        ppo_cfg = config.habitat_baselines.rl.ppo
+
+        with read_write(config):
+            config.habitat.dataset.split = config.habitat_baselines.eval.split
+
+        if (
+            len(config.habitat_baselines.video_render_views) > 0
+            and len(self.config.habitat_baselines.eval.video_option) > 0
+        ):
+            agent_config = get_agent_config(config.habitat.simulator)
+            agent_sensors = agent_config.sim_sensors
+            render_view_uuids = [
+                agent_sensors[render_view].uuid
+                for render_view in config.habitat_baselines.video_render_views
+                if render_view in agent_sensors
+            ]
+            assert len(render_view_uuids) > 0, (
+                f"Missing render sensors in agent config: "
+                f"{config.habitat_baselines.video_render_views}."
+            )
+            with read_write(config):
+                for render_view_uuid in render_view_uuids:
+                    if render_view_uuid not in config.habitat.gym.obs_keys:
+                        config.habitat.gym.obs_keys.append(render_view_uuid)
+                config.habitat.simulator.debug_render = True
+
+        if config.habitat_baselines.verbose:
+            logger.info(f"env config: {OmegaConf.to_yaml(config)}")
+
+        self._init_envs(config, is_eval=True)
+
+        action_space = self.envs.action_spaces[0]
+        self.policy_action_space = action_space
+        self.orig_policy_action_space = self.envs.orig_action_spaces[0]
+        if is_continuous_action_space(action_space):
+            # Assume NONE of the actions are discrete
+            action_shape = (get_num_actions(action_space),)
+            discrete_actions = False
+        else:
+            # For discrete pointnav
+            action_shape = (1,)
+            discrete_actions = True
+
+        self._setup_actor_critic_agent(ppo_cfg)
+
+        if self.agent.actor_critic.should_load_agent_state:
+            self.agent.load_state_dict(ckpt_dict["state_dict"], strict=False)
+        self.actor_critic = self.agent.actor_critic
+
+        observations = self.envs.reset()
+        
+        record_trajectory_start(self.config.habitat.dataset.data_path, self.config.habitat_baselines.eval.split)
+
+        batch = batch_obs(observations, device=self.device)
+        batch = apply_obs_transforms_batch(batch, self.obs_transforms)  # type: ignore
+
+        current_episode_reward = torch.zeros(
+            self.envs.num_envs, 1, device="cpu"
+        )
+
+        test_recurrent_hidden_states = torch.zeros(
+            self.config.habitat_baselines.num_environments,
+            self.actor_critic.num_recurrent_layers,
+            ppo_cfg.hidden_size,
+            device=self.device,
+        )
+        prev_actions = torch.zeros(
+            self.config.habitat_baselines.num_environments,
+            *action_shape,
+            device=self.device,
+            dtype=torch.long if discrete_actions else torch.float,
+        )
+        not_done_masks = torch.zeros(
+            self.config.habitat_baselines.num_environments,
+            1,
+            device=self.device,
+            dtype=torch.bool,
+        )
+        stats_episodes: Dict[
+            Any, Any
+        ] = {}  # dict of dicts that stores stats per episode
+        ep_eval_count: Dict[Any, int] = defaultdict(lambda: 0)
+
+        rgb_frames = [
+            [] for _ in range(self.config.habitat_baselines.num_environments)
+        ]  # type: List[List[np.ndarray]]
+        if len(self.config.habitat_baselines.eval.video_option) > 0:
+            os.makedirs(self.config.habitat_baselines.video_dir, exist_ok=True)
+
+        number_of_eval_episodes = (
+            self.config.habitat_baselines.test_episode_count
+        )
+        evals_per_ep = self.config.habitat_baselines.eval.evals_per_ep
+        if number_of_eval_episodes == -1:
+            number_of_eval_episodes = sum(self.envs.number_of_episodes)
+        else:
+            total_num_eps = sum(self.envs.number_of_episodes)
+            # if total_num_eps is negative, it means the number of evaluation episodes is unknown
+            if total_num_eps < number_of_eval_episodes and total_num_eps > 1:
+                logger.warn(
+                    f"Config specified {number_of_eval_episodes} eval episodes"
+                    ", dataset only has {total_num_eps}."
+                )
+                logger.warn(f"Evaluating with {total_num_eps} instead.")
+                number_of_eval_episodes = total_num_eps
+            else:
+                assert evals_per_ep == 1
+        assert (
+            number_of_eval_episodes > 0
+        ), "You must specify a number of evaluation episodes with test_episode_count"
+
+        pbar = tqdm.tqdm(total=number_of_eval_episodes * evals_per_ep)
+        self.actor_critic.eval()
+        while (
+            len(stats_episodes) < (number_of_eval_episodes * evals_per_ep)
+            and self.envs.num_envs > 0
+        ):
+            current_episodes_info = self.envs.current_episodes()
+
+            with inference_mode():
+                (
+                    _,
+                    actions,
+                    _,
+                    test_recurrent_hidden_states,
+                ) = self.actor_critic.act(
+                    batch,
+                    test_recurrent_hidden_states,
+                    prev_actions,
+                    not_done_masks,
+                    deterministic=False,
+                )
+
+                prev_actions.copy_(actions)  # type: ignore
+            # NB: Move actions to CPU.  If CUDA tensors are
+            # sent in to env.step(), that will create CUDA contexts
+            # in the subprocesses.
+            if is_continuous_action_space(self.policy_action_space):
+                # Clipping actions to the specified limits
+                step_data = [
+                    np.clip(
+                        a.numpy(),
+                        self.policy_action_space.low,
+                        self.policy_action_space.high,
+                    )
+                    for a in actions.cpu()
+                ]
+            else:
+                step_data = [a.item() for a in actions.cpu()]
+
+            record_trajectory_process(step_data, self.envs.current_episodes())
+
+            outputs = self.envs.step(step_data)
+
+            observations, rewards_l, dones, infos = [
+                list(x) for x in zip(*outputs)
+            ]
+            policy_info = self.actor_critic.get_policy_info(infos, dones)
+            for i in range(len(policy_info)):
+                infos[i].update(policy_info[i])
+            batch = batch_obs(  # type: ignore
+                observations,
+                device=self.device,
+            )
+            batch = apply_obs_transforms_batch(batch, self.obs_transforms)  # type: ignore
+
+            not_done_masks = torch.tensor(
+                [[not done] for done in dones],
+                dtype=torch.bool,
+                device="cpu",
+            )
+
+            rewards = torch.tensor(
+                rewards_l, dtype=torch.float, device="cpu"
+            ).unsqueeze(1)
+            current_episode_reward += rewards
+            next_episodes_info = self.envs.current_episodes()
+            envs_to_pause = []
+            n_envs = self.envs.num_envs
+            for i in range(n_envs):
+                if (
+                    ep_eval_count[
+                        (
+                            next_episodes_info[i].scene_id,
+                            next_episodes_info[i].episode_id,
+                        )
+                    ]
+                    == evals_per_ep
+                ):
+                    envs_to_pause.append(i)
+
+                if len(self.config.habitat_baselines.eval.video_option) > 0:
+                    # TODO move normalization / channel changing out of the policy and undo it here
+                    frame = observations_to_image(
+                        {k: v[i] for k, v in batch.items()}, infos[i]
+                    )
+                    if not not_done_masks[i].item():
+                        # The last frame corresponds to the first frame of the next episode
+                        # but the info is correct. So we use a black frame
+                        frame = observations_to_image(
+                            {k: v[i] * 0.0 for k, v in batch.items()}, infos[i]
+                        )
+                    frame = overlay_frame(frame, infos[i])
+                    rgb_frames[i].append(frame)
+
+                # episode ended
+                if not not_done_masks[i].item():
+                    pbar.update()
+                    episode_stats = {
+                        "reward": current_episode_reward[i].item()
+                    }
+                    episode_stats.update(
+                        self._extract_scalars_from_info(infos[i])
+                    )
+                    current_episode_reward[i] = 0
+                    k = (
+                        current_episodes_info[i].scene_id,
+                        current_episodes_info[i].episode_id,
+                    )
+                    ep_eval_count[k] += 1
+                    # use scene_id + episode_id as unique id for storing stats
+                    stats_episodes[(k, ep_eval_count[k])] = episode_stats
+
+                    if (
+                        len(self.config.habitat_baselines.eval.video_option)
+                        > 0
+                    ):
+                        generate_video(
+                            video_option=self.config.habitat_baselines.eval.video_option,
+                            video_dir=self.config.habitat_baselines.video_dir,
+                            images=rgb_frames[i],
+                            episode_id=current_episodes_info[i].episode_id,
+                            checkpoint_idx=checkpoint_index,
+                            metrics=self._extract_scalars_from_info(infos[i]),
+                            fps=self.config.habitat_baselines.video_fps,
+                            tb_writer=writer,
+                            keys_to_include_in_name=self.config.habitat_baselines.eval_keys_to_include_in_name,
+                        )
+
+                        rgb_frames[i] = []
+
+                    gfx_str = infos[i].get(GfxReplayMeasure.cls_uuid, "")
+                    if gfx_str != "":
+                        write_gfx_replay(
+                            gfx_str,
+                            self.config.habitat.task,
+                            current_episodes_info[i].episode_id,
+                        )
+
+            not_done_masks = not_done_masks.to(device=self.device)
+            (
+                self.envs,
+                test_recurrent_hidden_states,
+                not_done_masks,
+                current_episode_reward,
+                prev_actions,
+                batch,
+                rgb_frames,
+            ) = self._pause_envs(
+                envs_to_pause,
+                self.envs,
+                test_recurrent_hidden_states,
+                not_done_masks,
+                current_episode_reward,
+                prev_actions,
+                batch,
+                rgb_frames,
+            )
+
+        pbar.close()
+        assert (
+            len(ep_eval_count) >= number_of_eval_episodes
+        ), f"Expected {number_of_eval_episodes} episodes, got {len(ep_eval_count)}."
+
+        aggregated_stats = {}
+        for stat_key in next(iter(stats_episodes.values())).keys():
+            aggregated_stats[stat_key] = np.mean(
+                [v[stat_key] for v in stats_episodes.values()]
+            )
+
+        for k, v in aggregated_stats.items():
+            logger.info(f"Average episode {k}: {v:.4f}")
+
+        step_id = checkpoint_index
+        if "extra_state" in ckpt_dict and "step" in ckpt_dict["extra_state"]:
+            step_id = ckpt_dict["extra_state"]["step"]
+
+        writer.add_scalar(
+            "eval_reward/average_reward", aggregated_stats["reward"], step_id
+        )
+
+        metrics = {k: v for k, v in aggregated_stats.items() if k != "reward"}
+        for k, v in metrics.items():
+            writer.add_scalar(f"eval_metrics/{k}", v, step_id)
+
+        self.envs.close()
+
+        filename = checkpoint_path.split('/')[-1]
+        base_name = filename.split('.pth')[0]
+        new_name = base_name.replace('.', '_')
+        save_traj_path = os.path.join(self.config.habitat_baselines.eval.traj_dir, new_name)
+        record_trajectory_close(save_traj_path)
+
+
+    def is_done(self) -> bool:
+        local_done = self.episode_finish or (self.percent_done() >= 1.0)
+        local_rank, world_size, _ = get_distrib_size() # 假设这个函数能返回rank和world_size
+        
+        # 单进程直接返回
+        if not self._is_distributed:
+            return local_done
+
+        if local_rank == 0:
+            # Rank 0 收集所有信息或自行判断全局条件
+            # 这里简化处理，假设Rank 0根据自身状态和已知信息决定是否全部结束
+            global_done = local_done # 更复杂的逻辑可以在这里实现
+            signal_tensor = torch.tensor([global_done], dtype=torch.int, device='cuda')
+        else:
+            signal_tensor = torch.tensor([0], dtype=torch.int, device='cuda')
+
+        # Rank 0 将决策广播给所有其他进程
+        torch.distributed.broadcast(signal_tensor, src=0)
+        
+        if signal_tensor.item() == 1:
+            print(f"Rank {local_rank} received broadcast termination signal.")
+            torch.distributed.barrier()
+            return True
+        else:
+            return False
+
+    @profiling_wrapper.RangeContext("train")
+    def ver_train(self) -> None:
+        r"""Main method for training DD/PPO.
+
+        Returns:
+            None
+        """
+        torch.backends.cudnn.enabled = True
+        torch.backends.cudnn.benchmark = False
+        self.num_steps_done = 0
+        resume_state = load_resume_state(self.config)
+        if resume_state is not None:
+            self.config = resume_state["config"]
+
+            requeue_stats = resume_state["requeue_stats"]
+            self.num_steps_done = requeue_stats["num_steps_done"]
+            self.num_updates_done = requeue_stats["num_updates_done"]
+
+        self._init_train(resume_state)
+
+        count_checkpoints = 0
+
+        lr_scheduler = LambdaLR(
+            optimizer=self.agent.optimizer,
+            lr_lambda=lambda x: cosine_decay(self.percent_done()),
+        )
+
+        if resume_state is not None:
+            lr_scheduler.load_state_dict(resume_state["lr_sched_state"])
+
+            requeue_stats = resume_state["requeue_stats"]
+            self._last_checkpoint_percent = requeue_stats[
+                "_last_checkpoint_percent"
+            ]
+            count_checkpoints = requeue_stats["count_checkpoints"]
+
+        ppo_cfg = self.config.habitat_baselines.rl.ppo
+        if self.ver_config.overlap_rollouts_and_learn:
+            self.preemption_decider.start_rollout()
+
+        while not self.is_done():
+            profiling_wrapper.on_start_step()
+
+            if ppo_cfg.use_linear_clip_decay:
+                self.agent.clip_param = ppo_cfg.clip_param * (
+                    1 - self.percent_done()
+                )
+
+            if rank0_only() and self._should_save_resume_state():
+                requeue_stats = dict(
+                    count_checkpoints=count_checkpoints,
+                    num_steps_done=self.num_steps_done,
+                    num_updates_done=self.num_updates_done,
+                    _last_checkpoint_percent=self._last_checkpoint_percent,
+                    report_worker_state=self.report_worker.state_dict(),
+                )
+                resume_state = dict(
+                    state_dict=self.agent.state_dict(),
+                    optim_state=self.agent.optimizer.state_dict(),
+                    lr_sched_state=lr_scheduler.state_dict(),
+                    config=self.config,
+                    requeue_stats=requeue_stats,
+                )
+
+                save_resume_state(
+                    resume_state,
+                    self.config,
+                )
+
+            if EXIT.is_set():
+                profiling_wrapper.range_pop()  # train update
+                [w.close() for w in self._all_workers]
+                [w.join() for w in self._all_workers]
+
+                requeue_job()
+                break
+
+            with inference_mode():
+                if not self.ver_config.overlap_rollouts_and_learn:
+                    self.preemption_decider.start_rollout()
+                    while not self.rollouts.rollout_done:
+                        self._inference_worker_impl.try_one_step()
+
+                    self._inference_worker_impl.finish_rollout()
+
+                self._iw_sync.rollout_done.wait()
+                self._iw_sync.rollout_done.clear()
+
+                if self._iw_sync.all_workers.n_waiting > 0:
+                    raise RuntimeError(
+                        f"{self._iw_sync.all_workers.n_waiting} inference worker(s) is(are) still waiting on the IW barrier. "
+                        "Likely they never waited on it.\n"
+                    )
+
+                self.rollouts.after_rollout()
+
+                if self.ver_config.overlap_rollouts_and_learn:
+                    with self.timer.avg_time("overlap_transfers"):
+                        self.learning_rollouts.copy(self.rollouts)
+
+                self.preemption_decider.end_rollout(
+                    self.rollouts.num_steps_to_collect
+                )
+
+                self.queues.report.put(
+                    (
+                        ReportWorkerTasks.num_steps_collected,
+                        int(self.rollouts.num_steps_collected),
+                    )
+                )
+
+                if self.ver_config.overlap_rollouts_and_learn:
+                    with self.timer.avg_time("overlap_transfers"):
+                        self.rollouts.after_update()
+                        self._iw_sync.should_start_next.set()
+                        self.preemption_decider.start_rollout()
+
+            losses = self._update_agent()
+
+            self.preemption_decider.learner_time(self._learning_time)
+
+            self.queues.report.put_many(
+                (
+                    (
+                        ReportWorkerTasks.learner_timing,
+                        self.timer,
+                    ),
+                    (
+                        ReportWorkerTasks.learner_update,
+                        losses,
+                    ),
+                )
+            )
+            self.timer = Timing()
+
+            if ppo_cfg.use_linear_lr_decay:
+                lr_scheduler.step()  # type: ignore
+
+            self.num_steps_done = int(self.report_worker.num_steps_done)
+
+            self.num_updates_done += 1
+            
+            if rank0_only() and self.report_worker.get_env_status():
+                print("episode finish")
+                print("All processes reported episode finish. Saving checkpoint and exiting...")
+                self.save_checkpoint(
+                    f"ckpt.{count_checkpoints}.pth",
+                    dict(
+                        step=self.num_steps_done,
+                        wall_time=self.report_worker.time_taken,
+                    ),
+                )
+                count_checkpoints += 1
+                self.episode_finish = True
+
+            # checkpoint model
+            if rank0_only() and self.should_checkpoint():
+                self.save_checkpoint(
+                    f"ckpt.{count_checkpoints}.pth",
+                    dict(
+                        step=self.num_steps_done,
+                        wall_time=self.report_worker.time_taken,
+                    ),
+                )
+                count_checkpoints += 1
+
+        self.window_episode_stats = (
+            self.report_worker.get_window_episode_stats()
+        )
+
+        [w.close() for w in self._all_workers]
+        [w.join() for w in self._all_workers]
+
+        if self._is_distributed:
+            torch.distributed.barrier()
