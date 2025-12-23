@@ -30,6 +30,8 @@ from habitat.core.spaces import ActionSpace, EmptySpace, ListSpace
 from omegaconf import OmegaConf
 import random
 import os
+import gzip
+import json
 
 class ClipObjectGoalEmbeding:
     def __init__(
@@ -50,49 +52,34 @@ class ClipObjectGoalEmbeding:
             print("Missing category: {}".format(object_category))
         return self.cache[object_category]
 
-def get_image_save_dir():
-    save_dir = "/workspace/ovon/ovon/limo/save_img"
-    return save_dir
 
-def get_obj_category():
-    obj_category = "sofa"
-    return obj_category
+def create_episode(file_path, start_position, start_rotation, object_category):
+    episode_info = {
+        "start_position": [1.0342, 0.0, -1.5636],
+        "start_rotation": [0.0, 0.7071, 0.0, 0.7071],
+        "object_category": "sofa",
+    }
+    with gzip.open(file_path, 'rt', encoding='utf-8') as f:
+        dataset = json.load(f)
+        dataset["episodes"][0]["object_category"] = episode_info["object_category"]
+        dataset["episodes"][0]["start_position"] = episode_info["start_position"]
+        dataset["episodes"][0]["start_rotation"] = episode_info["start_rotation"]
+        
+        with gzip.open(file_path, 'wt', encoding='utf-8') as f:
+            json.dump(dataset, f, indent=4)
 
-# def get_episode_info():
-#     episode_info = {
-#         "start_position": [1.0342, 0.0, -1.5636],
-#         "start_rotation": [0.0, 0.7071, 0.0, 0.7071],
-#         "object_category": "sofa",
-#         "object_id": 42,
-#         "goal_position": [2.5, 0.0, -3.0],
-#     }
-#     with gzip.open(file_path, 'rt', encoding='utf-8') as f:  # 'rt' 表示以文本模式读取
-#         dataset = json.load(f)
-#         dataset["episodes"][0]["object_category"] = episode_info["object_category"]
-#         dataset["episodes"][0]["start_position"] = episode_info["start_position"]
-#         dataset["episodes"][0]["start_rotation"] = episode_info["start_rotation"]
-
-#     return episode_info
-
-def get_habitat_sim_action(action):
-    if action == 3:
-        return HabitatSimActions.turn_right
-    elif action == 2:
-        return HabitatSimActions.turn_left
-    elif action == 1:
-        return HabitatSimActions.move_forward
-    elif action == 0:
-        return HabitatSimActions.stop
 
 class OVON2Limo:
     def __init__(
         self,
+        save_dir,
+        obj_category,
     ) -> None:
-        config_dir = "/workspace/ovon/ovon/limo/transformer_il_3dgs.yaml"
+        self.save_dir = save_dir
+        self.obj_category = obj_category
+        config_dir = "/workspace/ovon/ovon/app/v1/transformer_il_3dgs.yaml"
         config = get_config(config_dir)
-        self.save_dir = get_image_save_dir()
-        self.obj_category = get_obj_category()
-
+        
         with read_write(config):
             if hasattr(
                 config.habitat_baselines.rl.policy.obs_transforms, "relabel_teacher_actions"
@@ -108,6 +95,7 @@ class OVON2Limo:
 
         self.env = habitat.Env(config=config)
         obs = self.env.reset()
+        
         self.current_obs = obs
         self.current_action = 0
 
@@ -148,21 +136,15 @@ class OVON2Limo:
         trainer_init = baseline_registry.get_trainer(
             config.habitat_baselines.trainer_name
         )
+
         self.trainer = trainer_init(config)
-        
-        # self.trainer = VERDAggerTrainer(self.config)
         self.trainer.obs_space = observation_space
         self.trainer.policy_action_space = action_space
         self.trainer.orig_policy_action_space = self.orig_policy_action_space
         self.trainer.device = self.device
         self.trainer._setup_actor_critic_agent(ppo_cfg)
-        # print("self.trainer:", self.trainer)
-        # print("self.obs_transforms:", self.obs_transforms)
-        # print("observation_space:", observation_space)
-        # print("action_space:", action_space)
-        # print("self.orig_policy_action_space:", self.orig_policy_action_space)
 
-        checkpoint_path = "/workspace/ovon/ovon/limo/ckpt_3dgs.pth"
+        checkpoint_path = "/workspace/ovon/ovon/app/v1/ckpt_3dgs.pth"
         ckpt = torch.load(checkpoint_path, map_location="cpu")
 
         self.trainer.agent.load_state_dict(ckpt["state_dict"], strict=False)
@@ -177,9 +159,6 @@ class OVON2Limo:
                                 device=self.device,
                                 dtype=torch.bool,
                             )
-        # print("self.config.habitat_baselines.num_environments", self.config.habitat_baselines.num_environments)
-        # print("self.actor_critic.num_recurrent_layers", self.actor_critic.num_recurrent_layers)
-        # print("self.config.habitat_baselines.rl.ppo.hidden_size", self.config.habitat_baselines.rl.ppo.hidden_size)
         self.test_recurrent_hidden_states = torch.zeros(
                                                 self.config.habitat_baselines.num_environments,
                                                 self.actor_critic.num_recurrent_layers,
@@ -188,7 +167,7 @@ class OVON2Limo:
                                             )
         self.object_goal_cache = ClipObjectGoalEmbeding(config=config)
         self.step_id = 0
-    
+
     def act(self):
         object_goal_embeding = self.object_goal_cache.get_observation(self.obj_category)
 
@@ -198,9 +177,6 @@ class OVON2Limo:
         observation['step_id'] = self.step_id
         observation['next_actions'] = 0
 
-        # print("image_array:", image_array)
-        # 保存当前帧观测图片
-        
         cur_img_name = self.obj_category + "_" + str(self.step_id) + "_" + str(self.current_action) + ".jpg"
         save_path = os.path.join(self.save_dir, cur_img_name)
         print("save_path:", save_path)
@@ -218,11 +194,6 @@ class OVON2Limo:
 
         batch = batch_obs([observation], device=self.device)
         batch = apply_obs_transforms_batch(batch, self.obs_transforms)
-        
-        # print("batch:", batch)
-        # print("self.test_recurrent_hidden_states:", self.test_recurrent_hidden_states)
-        # print("self.prev_actions_tensor:", self.prev_actions_tensor)
-        # print("self.not_done_masks:", self.not_done_masks)
 
         with inference_mode():
             (
@@ -266,7 +237,25 @@ class OVON2Limo:
         return False
 
 if __name__ == "__main__":
-    ovon = OVON2Limo()
+
+    file_path = "/workspace/ovon/data/task_datasets/objectnav/cloudrobo_v1/demo_1230/val/content/shenzhen-room_ziwei_20250724-metacam.json.gz"
+    object_category = "sofa"
+    start_position =  [
+                        -0.016438689082860947,
+                        0.05,
+                        4.700855445861816
+                    ]
+    start_rotation = [
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0
+                    ]
+    create_episode(file_path, start_position, start_rotation, object_category)
+
+    save_dir="/workspace/ovon/ovon/app/v1/save_img"
+
+    ovon = OVON2Limo(save_dir, object_category)
 
     finish = False
     while not finish:    
