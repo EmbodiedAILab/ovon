@@ -54,15 +54,22 @@ def run_navigation_task(obs_dir: str, object_category: str):
         with open(result_path, "w") as f:
             json.dump({"status": "FAILED", "error": str(e)}, f)
 
-@router.get("/navigation")
+def gen_save_dir_obs_dir(task, timestamp):
+    save_dir = f"/workspace/ovon/ovon/app/v1/output/{task}/{timestamp}"
+    obs_dir = f"output/{task}/{timestamp}"
+    return save_dir, obs_dir
+
+
+@router.post("/navigation")
 def get_navigation(request: NavigationRequest, background_tasks: BackgroundTasks):
     # 生成动态路径
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    obs_dir = f"{request.task}/{timestamp}"
+    save_dir, obs_dir = gen_save_dir_obs_dir(request.task, timestamp)
+    os.makedirs(save_dir, exist_ok=True)
     object_category = request.task
 
     # 将耗时任务添加到后台任务队列
-    background_tasks.add_task(run_navigation_task, obs_dir, object_category)
+    background_tasks.add_task(run_navigation_task, save_dir, object_category)
 
     # 立即返回目录信息，不等待后台任务结束
     return {"obs_dir": obs_dir, "message": "Task started in background"}
