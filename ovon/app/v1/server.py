@@ -56,7 +56,7 @@ def run_navigation_task(obs_dir: str, object_category: str):
 
 def gen_save_dir_obs_dir(task, timestamp):
     save_dir = f"/workspace/ovon/ovon/app/v1/output/{task}/{timestamp}"
-    obs_dir = f"output/{task}/{timestamp}"
+    obs_dir = f"obs://data-platform/navigation-demo/1230/{task}/{timestamp}"
     return save_dir, obs_dir
 
 
